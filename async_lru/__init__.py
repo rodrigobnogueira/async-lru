@@ -42,6 +42,7 @@ _R = TypeVar("_R")
 _Coro = Coroutine[Any, Any, _R]
 _CB = Callable[..., _Coro[_R]]
 _CBP = Union[_CB[_R], "partial[_Coro[_R]]", "partialmethod[_Coro[_R]]"]
+_KeyFunc = Callable[..., Hashable]
 
 
 @final
@@ -50,6 +51,7 @@ class _CacheParameters(TypedDict):
     maxsize: Optional[int]
     tasks: int
     closed: bool
+    key: Optional[_KeyFunc]
 
 
 @final
@@ -73,6 +75,7 @@ class _LRUCacheWrapper(Generic[_R]):
         maxsize: Optional[int],
         typed: bool,
         ttl: Optional[float],
+        key: Optional[_KeyFunc],
     ) -> None:
         try:
             self.__module__ = fn.__module__
@@ -106,6 +109,7 @@ class _LRUCacheWrapper(Generic[_R]):
         self.__maxsize = maxsize
         self.__typed = typed
         self.__ttl = ttl
+        self.__key = key
         self.__cache: OrderedDict[Hashable, _CacheItem[_R]] = OrderedDict()
         self.__closed = False
         self.__hits = 0
@@ -136,7 +140,10 @@ class _LRUCacheWrapper(Generic[_R]):
 
     def cache_invalidate(self, /, *args: Hashable, **kwargs: Any) -> bool:
         self._check_thread()
-        key = _make_key(args, kwargs, self.__typed)
+        if self.__key is not None:
+            key = self.__key(*args, **kwargs)
+        else:
+            key = _make_key(args, kwargs, self.__typed)
 
         cache_item = self.__cache.pop(key, None)
         if cache_item is None:
@@ -184,6 +191,7 @@ class _LRUCacheWrapper(Generic[_R]):
             typed=self.__typed,
             tasks=len(self.__tasks),
             closed=self.__closed,
+            key=self.__key,
         )
 
     def _cache_hit(self, key: Hashable) -> None:
@@ -235,7 +243,10 @@ class _LRUCacheWrapper(Generic[_R]):
 
         loop = asyncio.get_running_loop()
 
-        key = _make_key(fn_args, fn_kwargs, self.__typed)
+        if self.__key is not None:
+            key = self.__key(*fn_args, **fn_kwargs)
+        else:
+            key = _make_key(fn_args, fn_kwargs, self.__typed)
 
         cache_item = self.__cache.get(key)
 
@@ -337,6 +348,7 @@ def _make_wrapper(
     maxsize: Optional[int],
     typed: bool,
     ttl: Optional[float] = None,
+    key: Optional[_KeyFunc] = None,
 ) -> Callable[[_CBP[_R]], _LRUCacheWrapper[_R]]:
     def wrapper(fn: _CBP[_R]) -> _LRUCacheWrapper[_R]:
         origin = fn
@@ -351,7 +363,7 @@ def _make_wrapper(
         if hasattr(fn, "_make_unbound_method"):
             fn = fn._make_unbound_method()
 
-        wrapper = _LRUCacheWrapper(cast(_CB[_R], fn), maxsize, typed, ttl)
+        wrapper = _LRUCacheWrapper(cast(_CB[_R], fn), maxsize, typed, ttl, key)
         if sys.version_info >= (3, 12):
             wrapper = inspect.markcoroutinefunction(wrapper)
         return wrapper
@@ -365,6 +377,7 @@ def alru_cache(
     typed: bool = False,
     *,
     ttl: Optional[float] = None,
+    key: Optional[_KeyFunc] = None,
 ) -> Callable[[_CBP[_R]], _LRUCacheWrapper[_R]]:
     ...
 
@@ -382,9 +395,10 @@ def alru_cache(
     typed: bool = False,
     *,
     ttl: Optional[float] = None,
+    key: Optional[_KeyFunc] = None,
 ) -> Union[Callable[[_CBP[_R]], _LRUCacheWrapper[_R]], _LRUCacheWrapper[_R]]:
     if maxsize is None or isinstance(maxsize, int):
-        return _make_wrapper(maxsize, typed, ttl)
+        return _make_wrapper(maxsize, typed, ttl, key)
     else:
         fn = cast(_CB[_R], maxsize)
 

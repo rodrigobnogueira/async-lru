@@ -92,6 +92,28 @@ The library supports explicit invalidation for specific function call by
 The method returns `True` if corresponding arguments set was cached already, `False`
 otherwise.
 
+Custom Cache Key
+^^^^^^^^^^^^^^^^
+
+You can provide a custom ``key`` function to control which arguments are used for
+the cache key. This is useful when some arguments (like database connections)
+should not affect caching:
+
+.. code-block:: python
+
+    @alru_cache(key=lambda db, query: query)
+    async def fetch_data(db_connection, query):
+        return await db_connection.execute(query)
+
+    # Different connections, same query = cache hit
+    result1 = await fetch_data(conn1, "SELECT * FROM users")
+    result2 = await fetch_data(conn2, "SELECT * FROM users")  # Returns cached result
+
+The ``key`` function receives the same arguments as the wrapped function and must
+return a hashable value. When using a custom ``key`` function, the ``typed``
+parameter has no effect since type handling becomes the key function's
+responsibility.
+
 Limitations
 -----------
 

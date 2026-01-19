@@ -169,6 +169,7 @@ async def test_alru_cache_parameters() -> None:
         maxsize=128,
         tasks=0,
         closed=False,
+        key=None,
     )
 
     await coro(1)
@@ -177,6 +178,7 @@ async def test_alru_cache_parameters() -> None:
         maxsize=128,
         tasks=0,
         closed=False,
+        key=None,
     )
 
 
@@ -196,6 +198,7 @@ async def test_alru_cache_method() -> None:
         maxsize=128,
         tasks=0,
         closed=False,
+        key=None,
     )
 
 
@@ -214,6 +217,7 @@ async def test_alru_cache_classmethod() -> None:
         maxsize=128,
         tasks=0,
         closed=False,
+        key=None,
     )
 
 
