@@ -2,7 +2,8 @@ import asyncio
 import inspect
 import sys
 from functools import _CacheInfo, partial
-from typing import Callable
+from typing import Any, Callable
+from unittest.mock import patch
 
 import pytest
 
@@ -15,11 +16,12 @@ def test_alru_cache_not_callable() -> None:
 
 
 def test_alru_cache_not_coroutine() -> None:
-    with pytest.raises(RuntimeError):
+    def not_coro(val: int) -> int:
+        return val
 
-        @alru_cache  # type: ignore[arg-type]
-        def not_coro(val: int) -> int:
-            return val
+    assert not_coro(1) == 1
+    with pytest.raises(RuntimeError, match="Coroutine function is required"):
+        alru_cache()(not_coro)  # type: ignore[arg-type]
 
 
 async def test_alru_cache_deco(check_lru: Callable[..., None]) -> None:
@@ -27,9 +29,9 @@ async def test_alru_cache_deco(check_lru: Callable[..., None]) -> None:
     async def coro() -> None:
         pass
 
-    if sys.version_info >= (3, 12):
+    if sys.version_info >= (3, 12):  # pragma: no branch
         assert inspect.iscoroutinefunction(coro)
-    if sys.version_info < (3, 14):
+    if sys.version_info < (3, 14):  # pragma: no cover
         assert asyncio.iscoroutinefunction(coro)
 
     check_lru(coro, hits=0, misses=0, cache=0, tasks=0)
@@ -44,9 +46,9 @@ async def test_alru_cache_deco_called(check_lru: Callable[..., None]) -> None:
     async def coro() -> None:
         pass
 
-    if sys.version_info >= (3, 12):
+    if sys.version_info >= (3, 12):  # pragma: no branch
         assert inspect.iscoroutinefunction(coro)
-    if sys.version_info < (3, 14):
+    if sys.version_info < (3, 14):  # pragma: no cover
         assert asyncio.iscoroutinefunction(coro)
 
     check_lru(coro, hits=0, misses=0, cache=0, tasks=0)
@@ -62,9 +64,9 @@ async def test_alru_cache_fn_called(check_lru: Callable[..., None]) -> None:
 
     coro_wrapped = alru_cache(coro)
 
-    if sys.version_info >= (3, 12):
+    if sys.version_info >= (3, 12):  # pragma: no branch
         assert inspect.iscoroutinefunction(coro_wrapped)
-    if sys.version_info < (3, 14):
+    if sys.version_info < (3, 14):  # pragma: no cover
         assert asyncio.iscoroutinefunction(coro)
 
     check_lru(coro_wrapped, hits=0, misses=0, cache=0, tasks=0)
@@ -72,6 +74,32 @@ async def test_alru_cache_fn_called(check_lru: Callable[..., None]) -> None:
     awaitable = coro_wrapped()
     assert asyncio.iscoroutine(awaitable)
     await awaitable
+
+
+async def test_wrapper_attribute_fallbacks() -> None:
+    class RaiseAttrCallable:
+        def __getattribute__(self, name: str) -> Any:
+            if name in {
+                "__module__",
+                "__name__",
+                "__qualname__",
+                "__doc__",
+                "__annotations__",
+                "__dict__",
+            }:
+                raise AttributeError(name)
+            return super().__getattribute__(name)
+
+        async def __call__(self) -> None:
+            return None
+
+    mock_callable = RaiseAttrCallable()
+    await mock_callable()
+
+    with patch("async_lru.inspect.iscoroutinefunction", return_value=True):
+        wrapped = alru_cache()(mock_callable)
+
+    await wrapped()
 
 
 async def test_alru_cache_partial() -> None:

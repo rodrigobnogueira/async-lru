@@ -1,5 +1,5 @@
 import asyncio
-from typing import Callable
+from typing import Any, Callable, cast
 
 import pytest
 
@@ -10,8 +10,10 @@ async def test_cache_close(check_lru: Callable[..., None]) -> None:
     @alru_cache()
     async def coro(val: int) -> int:
         await asyncio.sleep(0.2)
-
         return val
+
+    assert await coro(0) == 0
+    coro.cache_clear()
 
     assert not coro.cache_parameters()["closed"]
 
@@ -68,3 +70,18 @@ async def test_cache_close_wait_bound_method(check_lru: Callable[..., None]) -> 
 
     check_lru(foo.coro, hits=0, misses=3, cache=3, tasks=0)
     assert foo.coro.cache_parameters()["closed"]
+
+
+async def test_cache_close_deprecated_cancel() -> None:
+    class MyClass:
+        @alru_cache()
+        async def coro(self, val: int) -> int:
+            return val
+
+    obj = MyClass()
+    await obj.coro(1)
+    cache_close = cast(Any, obj.coro.cache_close)
+    with pytest.warns(DeprecationWarning, match="cancel/return_exceptions"):
+        await cache_close(cancel=True)
+    with pytest.warns(DeprecationWarning, match="cancel/return_exceptions"):
+        await cache_close(return_exceptions=False)

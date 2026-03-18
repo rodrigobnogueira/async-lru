@@ -24,12 +24,12 @@ from typing import (
 )
 
 
-if sys.version_info >= (3, 11):
-    from typing import Self
-else:
+if sys.version_info < (3, 11):  # pragma: no cover
     from typing_extensions import Self
+else:
+    from typing import Self
 
-if sys.version_info < (3, 14):
+if sys.version_info < (3, 14):  # pragma: no cover
     from asyncio.coroutines import _is_coroutine  # type: ignore[attr-defined]
 
 
@@ -106,7 +106,7 @@ class _LRUCacheWrapper(Generic[_R]):
             pass
         # set __wrapped__ last so we don't inadvertently copy it
         # from the wrapped function when updating __dict__
-        if sys.version_info < (3, 14):
+        if sys.version_info < (3, 14):  # pragma: no cover
             self._is_coroutine = _is_coroutine
         self.__wrapped__ = fn
         self.__maxsize = maxsize
@@ -186,8 +186,7 @@ class _LRUCacheWrapper(Generic[_R]):
 
         if not wait:
             for task in tasks:
-                if not task.done():
-                    task.cancel()
+                task.cancel()
 
         await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -328,7 +327,7 @@ class _LRUCacheWrapperInstanceMethod(Generic[_R, _T]):
             pass
         # set __wrapped__ last so we don't inadvertently copy it
         # from the wrapped function when updating __dict__
-        if sys.version_info < (3, 14):
+        if sys.version_info < (3, 14):  # pragma: no cover
             self._is_coroutine = _is_coroutine
         self.__wrapped__ = wrapper.__wrapped__
         self.__instance = instance
@@ -393,7 +392,7 @@ def _make_wrapper(
             fn = fn._make_unbound_method()
 
         wrapper = _LRUCacheWrapper(cast(_CB[_R], fn), maxsize, typed, ttl, jitter)
-        if sys.version_info >= (3, 12):
+        if sys.version_info >= (3, 12):  # pragma: no branch
             wrapper = inspect.markcoroutinefunction(wrapper)
         return wrapper
 
